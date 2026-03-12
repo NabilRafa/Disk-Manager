@@ -32,5 +32,8 @@
       "installerIcon": "icon.ico",
       "uninstallerIcon": "icon.ico"
     }
+  },
+  "dependencies": {
+    "build": "^0.1.4"
   }
 }
