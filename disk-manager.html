@@ -222,6 +222,144 @@
   .copy-btn:hover { border-color: var(--text); color: var(--text); }
   .script-hint { font-size: 10px; color: var(--dim); line-height: 1.9; margin-top: 12px; }
   .script-hint span { color: var(--amber); }
+
+  /* ── CONFIRM MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(3px);
+  }
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--red);
+    border-top: 2px solid var(--red);
+    width: 420px;
+    max-width: 90vw;
+    padding: 28px 28px 22px;
+    position: relative;
+    box-shadow: 0 0 40px rgba(255,51,85,0.2);
+  }
+
+  .modal-icon {
+    font-size: 28px;
+    margin-bottom: 14px;
+    display: block;
+  }
+
+  .modal-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--red);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+
+  .modal-msg {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.8;
+    margin-bottom: 6px;
+  }
+
+  .modal-warn {
+    font-size: 10px;
+    color: var(--amber);
+    line-height: 1.7;
+    margin-bottom: 22px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255,170,0,0.2);
+    background: rgba(255,170,0,0.04);
+  }
+
+  .modal-btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .modal-cancel {
+    padding: 12px 0;
+    background: transparent;
+    border: 1px solid var(--dim);
+    color: var(--dim);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .modal-cancel:hover { border-color: var(--text); color: var(--text); }
+
+  .modal-confirm {
+    padding: 12px 0;
+    background: transparent;
+    border: 1px solid var(--red);
+    color: var(--red);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.12s;
+    position: relative;
+    overflow: hidden;
+  }
+  .modal-confirm:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .modal-confirm:not(:disabled):hover {
+    background: rgba(255,51,85,0.08);
+    box-shadow: 0 0 12px rgba(255,51,85,0.3);
+  }
+
+  .modal-timer {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    text-align: center;
+    margin-top: 12px;
+  }
+
+  .modal-timer-bar {
+    height: 2px;
+    background: var(--border);
+    margin-top: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  .modal-timer-fill {
+    height: 100%;
+    background: var(--red);
+    width: 0%;
+    transition: width 1s linear;
+    box-shadow: 0 0 6px var(--red);
+  }
+
+  /* BLOCKED DISK row style */
+  .disk-row.blocked { opacity: 0.4; cursor: not-allowed; }
+  .disk-row.blocked::before { background: var(--red) !important; }
+  .disk-row.blocked:hover { border-color: var(--red); }
+  .system-tag {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 7px;
+    letter-spacing: 1px;
+    color: var(--red);
+    border: 1px solid var(--red);
+    padding: 2px 5px;
+    margin-left: 6px;
+    vertical-align: middle;
+    opacity: 0.8;
+  }
 </style>
 </head>
 <body>
@@ -300,6 +438,31 @@ attributes disk clear readonly</div>
 
 </div>
 
+<!-- ── CONFIRM OFFLINE MODAL ── -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <span class="modal-icon">⚠️</span>
+    <div class="modal-title">Confirm Offline Disk</div>
+    <div class="modal-msg" id="modalMsg">Are you sure you want to offline this disk?</div>
+    <div class="modal-warn">
+      Make sure all programs and files using this drive are closed before proceeding.
+      Offlineing an active disk may cause data loss.
+    </div>
+    <div class="modal-btn-row">
+      <button class="modal-cancel" onclick="closeModal()">✕ CANCEL</button>
+      <button class="modal-confirm" id="modalConfirmBtn" disabled onclick="confirmOffline()">
+        OFFLINE <span id="modalCountdown">(5)</span>
+      </button>
+    </div>
+    <div class="modal-timer">
+      <span id="modalTimerText">Please wait...</span>
+      <div class="modal-timer-bar">
+        <div class="modal-timer-fill" id="modalTimerFill"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─────────────────────────────────────────
 // Electron IPC — hanya aktif di dalam Electron
@@ -307,12 +470,12 @@ attributes disk clear readonly</div>
 let ipcRenderer = null;
 try {
   ipcRenderer = require('electron').ipcRenderer;
-} catch (e) {
-  // Berjalan di browser biasa, IPC tidak tersedia
-}
+} catch (e) {}
 
 let selectedDisk = null;
 let scannedDisks = [];
+let systemDiskNum = null; // disk number yang berisi drive C
+let modalTimerInterval = null;
 
 // ─────────────────────────────────────────
 // LOG
@@ -339,9 +502,17 @@ async function scanDisks() {
   let disks = [];
 
   if (ipcRenderer) {
-    // ── Electron: gunakan IPC ──
     try {
       disks = await ipcRenderer.invoke('list-disks');
+      // Deteksi disk yang berisi drive C (system disk)
+      try {
+        const sysDisk = await ipcRenderer.invoke('get-system-disk');
+        if (sysDisk !== null && sysDisk !== undefined) {
+          systemDiskNum = sysDisk;
+          log('> System disk (C:) terdeteksi di Disk ' + systemDiskNum + ' — disk ini diproteksi.', 'info');
+        }
+      } catch (e) {}
+
       if (disks.length > 0) {
         log('> ' + disks.length + ' disk ditemukan.', 'success');
       } else {
@@ -351,7 +522,6 @@ async function scanDisks() {
       log('> Gagal membaca disk: ' + e.message, 'error');
     }
   } else {
-    // ── Browser fallback: data dummy ──
     log('> Electron IPC tidak tersedia — data contoh ditampilkan.', 'error');
     log('> Build ke .exe untuk data disk real.', 'info');
     disks = [
@@ -359,6 +529,8 @@ async function scanDisks() {
       { num: 1, name: 'WDC WD10EZEX-08WN4A0',       type: 'HDD',  size: '931.5 GB', status: 'offline' },
       { num: 2, name: 'Kingston DataTraveler 3.0',   type: 'USB',  size: '14.9 GB',  status: 'online'  },
     ];
+    systemDiskNum = 0; // simulasi: disk 0 adalah system disk
+    log('> System disk (C:) disimulasikan di Disk 0 — disk ini diproteksi.', 'info');
   }
 
   scannedDisks = disks;
@@ -378,15 +550,17 @@ function renderDiskList(disks) {
     return;
   }
   disks.forEach(disk => {
+    const isSystem = (systemDiskNum !== null && disk.num === systemDiskNum);
     const row = document.createElement('div');
-    row.className = 'disk-row';
+    row.className = 'disk-row' + (isSystem ? ' blocked' : '');
     row.id = 'diskrow-' + disk.num;
-    row.onclick = () => selectDisk(disk);
+    row.onclick = () => isSystem ? showBlockedWarning(disk) : selectDisk(disk);
     const st = (disk.status || 'unknown').toLowerCase();
+    const systemTag = isSystem ? '<span class="system-tag">SYSTEM C:</span>' : '';
     row.innerHTML = `
       <div class="disk-num">${disk.num}</div>
       <div class="disk-info">
-        <div class="disk-name">${disk.name || 'Unknown Disk'}</div>
+        <div class="disk-name">${disk.name || 'Unknown Disk'}${systemTag}</div>
         <div class="disk-type">${disk.type || 'DISK'}</div>
       </div>
       <div class="disk-size">${disk.size || '—'}</div>
@@ -395,6 +569,11 @@ function renderDiskList(disks) {
     `;
     list.appendChild(row);
   });
+}
+
+function showBlockedWarning(disk) {
+  log(`> ⛔ Disk ${disk.num} adalah system disk (C:) — tidak dapat di-offline.`, 'error');
+  switchTab('log');
 }
 
 // ─────────────────────────────────────────
@@ -453,10 +632,83 @@ function updateScripts(num) {
 }
 
 // ─────────────────────────────────────────
+// CONFIRM MODAL — offline only
+// ─────────────────────────────────────────
+function showOfflineModal(disk) {
+  // Block system disk
+  if (systemDiskNum !== null && disk.num === systemDiskNum) {
+    log(`> ⛔ Disk ${disk.num} adalah system disk (C:) — tidak dapat di-offline.`, 'error');
+    return;
+  }
+
+  document.getElementById('modalMsg').textContent =
+    `Are you sure you want to offline Disk ${disk.num} — "${disk.name || 'Unknown'}"?`;
+
+  const confirmBtn = document.getElementById('modalConfirmBtn');
+  const countdown  = document.getElementById('modalCountdown');
+  const timerText  = document.getElementById('modalTimerText');
+  const timerFill  = document.getElementById('modalTimerFill');
+
+  confirmBtn.disabled = true;
+  countdown.textContent = '(5)';
+  timerText.textContent = 'Please wait...';
+  timerFill.style.transition = 'none';
+  timerFill.style.width = '0%';
+
+  document.getElementById('confirmModal').classList.add('visible');
+
+  let secs = 5;
+  // Trigger reflow to reset transition
+  void timerFill.offsetWidth;
+  timerFill.style.transition = 'width 5s linear';
+  timerFill.style.width = '100%';
+
+  if (modalTimerInterval) clearInterval(modalTimerInterval);
+  modalTimerInterval = setInterval(() => {
+    secs--;
+    if (secs > 0) {
+      countdown.textContent = '(' + secs + ')';
+      timerText.textContent = 'Please wait ' + secs + ' second' + (secs > 1 ? 's' : '') + '...';
+    } else {
+      clearInterval(modalTimerInterval);
+      confirmBtn.disabled = false;
+      countdown.textContent = '';
+      timerText.textContent = 'Ready — click OFFLINE to confirm.';
+    }
+  }, 1000);
+}
+
+function closeModal() {
+  document.getElementById('confirmModal').classList.remove('visible');
+  if (modalTimerInterval) clearInterval(modalTimerInterval);
+}
+
+function confirmOffline() {
+  closeModal();
+  executeAction('offline');
+}
+
+// ─────────────────────────────────────────
 // RUN DISKPART ACTION
 // ─────────────────────────────────────────
-async function runAction(action) {
+function runAction(action) {
   if (!selectedDisk) { log('> Pilih disk dulu!', 'error'); return; }
+
+  // Block system disk
+  if (action === 'offline' && systemDiskNum !== null && selectedDisk.num === systemDiskNum) {
+    log(`> ⛔ Disk ${selectedDisk.num} adalah system disk (C:) — tidak dapat di-offline.`, 'error');
+    return;
+  }
+
+  if (action === 'offline') {
+    showOfflineModal(selectedDisk);
+  } else {
+    executeAction('online');
+  }
+}
+
+async function executeAction(action) {
+  if (!selectedDisk) return;
 
   const num = selectedDisk.num;
   document.getElementById('btnOffline').disabled = true;
@@ -471,21 +723,17 @@ async function runAction(action) {
     : `select disk ${num}\nonline disk\nattributes disk clear readonly`;
 
   if (ipcRenderer) {
-    // ── Electron: eksekusi langsung via diskpart ──
     try {
       const result = await ipcRenderer.invoke('run-diskpart', cmds);
-
       if (result.output) {
         result.output.split('\n').forEach(line => {
           const l = line.trim();
           if (l) log('  ' + l, result.error ? 'error' : 'running');
         });
       }
-
       if (!result.error) {
         selectedDisk.status = action === 'offline' ? 'offline' : 'online';
         updateSelectedPanel(selectedDisk);
-        // Update badge di list
         const row = document.getElementById('diskrow-' + num);
         if (row) {
           const badge = row.querySelector('.status-badge');
@@ -502,7 +750,6 @@ async function runAction(action) {
       log('> Error: ' + e.message, 'error');
     }
   } else {
-    // ── Browser fallback ──
     log('> Electron IPC tidak tersedia.', 'error');
     log('> Salin script dari tab MANUAL SCRIPT → jalankan di CMD Admin.', 'info');
   }

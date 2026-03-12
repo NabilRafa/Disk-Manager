@@ -81,7 +81,7 @@ ipcMain.handle('run-diskpart', async (event, commands) => {
     try {
       fs.writeFileSync(tmpFile, commands, 'utf8');
     } catch (writeErr) {
-      resolve({ output: 'Gagal menulis script: ' + writeErr.message, error: true });
+      resolve({ output: 'Failed to write script: ' + writeErr.message, error: true });
       return;
     }
 
@@ -91,7 +91,7 @@ ipcMain.handle('run-diskpart', async (event, commands) => {
 
       const output = (stdout || stderr || '').trim();
       resolve({
-        output: output || 'Perintah selesai dijalankan.',
+        output: output || 'Command finished.',
         error: !!err
       });
     });
