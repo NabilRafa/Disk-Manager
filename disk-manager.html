@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disk Manager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --panel: #0f1318;
+    --border: #1e2832;
+    --green: #00ff88;
+    --red: #ff3355;
+    --amber: #ffaa00;
+    --blue: #00aaff;
+    --dim: #3a4a5a;
+    --text: #c8d8e8;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,136,0.012) 2px, rgba(0,255,136,0.012) 4px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; width: 560px; max-width: 100%; }
+
+  .header { text-align: center; margin-bottom: 28px; }
+  .title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 20px; font-weight: 900; letter-spacing: 5px;
+    color: var(--green); text-shadow: 0 0 24px rgba(0,255,136,0.4); margin-bottom: 5px;
+  }
+  .subtitle { font-size: 10px; color: var(--dim); letter-spacing: 3px; text-transform: uppercase; }
+
+  .section-label {
+    font-size: 9px; color: var(--dim); letter-spacing: 3px;
+    text-transform: uppercase; margin-bottom: 8px; padding-left: 2px;
+  }
+
+  /* DISK LIST */
+  .disk-list { margin-bottom: 12px; display: flex; flex-direction: column; gap: 5px; }
+
+  .disk-row {
+    display: grid;
+    grid-template-columns: 40px 1fr auto auto 28px;
+    align-items: center;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    cursor: pointer;
+    transition: all 0.12s;
+    position: relative;
+    overflow: hidden;
+  }
+  .disk-row::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 2px; background: var(--dim); transition: background 0.12s;
+  }
+  .disk-row:hover { border-color: var(--blue); }
+  .disk-row:hover::before { background: var(--blue); }
+  .disk-row.selected { border-color: var(--green); background: #0f1f18; }
+  .disk-row.selected::before { background: var(--green); }
+
+  .disk-num {
+    font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
+    color: var(--dim); text-align: center; padding: 14px 0;
+    border-right: 1px solid var(--border);
+  }
+  .disk-row.selected .disk-num { color: var(--green); }
+
+  .disk-info { padding: 10px 14px; min-width: 0; }
+  .disk-name { font-size: 12px; color: var(--text); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .disk-type { font-size: 10px; color: var(--dim); }
+
+  .disk-size { font-size: 11px; color: var(--text); padding: 0 10px; white-space: nowrap; }
+
+  .disk-status { padding: 0 10px; }
+  .status-badge {
+    font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700;
+    letter-spacing: 1px; padding: 3px 7px; border: 1px solid;
+  }
+  .status-badge.online  { color: var(--green); border-color: var(--green); background: rgba(0,255,136,0.07); }
+  .status-badge.offline { color: var(--red);   border-color: var(--red);   background: rgba(255,51,85,0.07); }
+  .status-badge.unknown { color: var(--amber); border-color: var(--amber); background: rgba(255,170,0,0.07); }
+
+  .disk-check {
+    width: 28px; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: transparent; border-left: 1px solid var(--border); padding: 14px 0;
+  }
+  .disk-row.selected .disk-check { color: var(--green); }
+
+  .disk-empty {
+    border: 1px dashed var(--border); padding: 20px; text-align: center;
+    font-size: 11px; color: var(--dim); line-height: 1.8;
+  }
+
+  /* SCAN BUTTON */
+  .load-btn {
+    width: 100%; padding: 11px; background: transparent; border: 1px solid var(--blue);
+    color: var(--blue); font-family: 'Orbitron', sans-serif; font-size: 10px;
+    letter-spacing: 2px; cursor: pointer; transition: all 0.15s; margin-bottom: 20px;
+  }
+  .load-btn:hover { background: rgba(0,170,255,0.07); box-shadow: 0 0 12px rgba(0,170,255,0.2); }
+  .load-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* MANUAL INPUT */
+  .manual-row { display: flex; gap: 8px; margin-bottom: 20px; }
+  .manual-input-wrap {
+    flex: 1; border: 1px solid var(--border); background: var(--panel);
+    display: flex; align-items: center; padding: 0 12px; gap: 10px;
+  }
+  .manual-label { font-size: 10px; color: var(--dim); letter-spacing: 1px; white-space: nowrap; }
+  .manual-input {
+    background: transparent; border: none; outline: none;
+    font-family: 'Share Tech Mono', monospace; font-size: 14px;
+    color: var(--green); width: 60px; padding: 12px 0;
+  }
+  .manual-input::placeholder { color: var(--dim); }
+  .select-btn {
+    padding: 0 18px; background: transparent; border: 1px solid var(--dim);
+    color: var(--dim); font-family: 'Orbitron', sans-serif; font-size: 9px;
+    letter-spacing: 2px; cursor: pointer; transition: all 0.12s;
+  }
+  .select-btn:hover { border-color: var(--text); color: var(--text); }
+
+  /* SELECTED PANEL */
+  .selected-panel {
+    border: 1px solid var(--border); border-top: 2px solid var(--green);
+    background: var(--panel); padding: 18px 20px; margin-bottom: 20px; display: none;
+  }
+  .selected-panel.visible { display: block; }
+
+  .selected-header {
+    display: flex; justify-content: space-between;
+    align-items: flex-start; margin-bottom: 16px;
+  }
+  .selected-name { font-size: 13px; color: var(--text); margin-bottom: 4px; }
+  .selected-meta { font-size: 10px; color: var(--dim); }
+
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn {
+    padding: 13px 0; border: 1px solid; background: transparent;
+    font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+    letter-spacing: 2px; cursor: pointer; transition: all 0.12s;
+    position: relative; overflow: hidden;
+  }
+  .btn::after { content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity 0.12s; }
+  .btn:hover::after { opacity: 0.1; }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+  .btn-offline { color: var(--red); border-color: var(--red); }
+  .btn-offline::after { background: var(--red); }
+  .btn-offline:hover:not(:disabled) { box-shadow: 0 0 14px rgba(255,51,85,0.3); }
+  .btn-online { color: var(--green); border-color: var(--green); }
+  .btn-online::after { background: var(--green); }
+  .btn-online:hover:not(:disabled) { box-shadow: 0 0 14px rgba(0,255,136,0.3); }
+
+  /* TABS */
+  .tab-row { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: -1px; }
+  .tab {
+    padding: 8px; text-align: center; font-family: 'Orbitron', sans-serif;
+    font-size: 9px; letter-spacing: 1px; cursor: pointer;
+    border: 1px solid var(--border); color: var(--dim); background: transparent; transition: all 0.12s;
+  }
+  .tab.active { border-bottom-color: var(--panel); color: var(--green); background: var(--panel); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .terminal {
+    background: #060809; border: 1px solid var(--border);
+    padding: 14px; height: 150px; overflow-y: auto; font-size: 11px; line-height: 1.8;
+  }
+  .terminal::-webkit-scrollbar { width: 3px; }
+  .terminal::-webkit-scrollbar-thumb { background: var(--dim); }
+
+  .log-line { margin: 0; }
+  .log-line.info    { color: var(--dim); }
+  .log-line.cmd     { color: var(--amber); }
+  .log-line.success { color: var(--green); }
+  .log-line.error   { color: var(--red); }
+  .log-line.running { color: var(--text); }
+
+  .script-section {
+    background: #060809; border: 1px solid var(--border);
+    border-top: none; padding: 16px;
+  }
+  .script-label {
+    font-size: 9px; color: var(--dim); letter-spacing: 2px;
+    text-transform: uppercase; margin-bottom: 8px; margin-top: 14px;
+  }
+  .script-label:first-child { margin-top: 0; }
+  .script-box {
+    background: var(--bg); border: 1px solid var(--border); padding: 10px 12px;
+    font-size: 11px; color: var(--amber); line-height: 1.8;
+    white-space: pre; overflow-x: auto; margin-bottom: 8px;
+  }
+  .copy-btn {
+    width: 100%; padding: 8px; background: transparent; border: 1px solid var(--dim);
+    color: var(--dim); font-family: 'Orbitron', sans-serif; font-size: 9px;
+    letter-spacing: 2px; cursor: pointer; transition: all 0.12s; margin-bottom: 4px;
+  }
+  .copy-btn:hover { border-color: var(--text); color: var(--text); }
+  .script-hint { font-size: 10px; color: var(--dim); line-height: 1.9; margin-top: 12px; }
+  .script-hint span { color: var(--amber); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="title">DISK MANAGER</div>
+    <div class="subtitle">diskpart controller · windows</div>
+  </div>
+
+  <div class="section-label">— Pilih Disk Target</div>
+
+  <div class="disk-list" id="diskList">
+    <div class="disk-empty">
+      Klik <strong style="color:var(--blue)">SCAN DISKS</strong> untuk mendeteksi disk.<br>
+      <span style="font-size:10px;">Atau masukkan disk number manual di bawah.</span>
+    </div>
+  </div>
+
+  <button class="load-btn" id="scanBtn" onclick="scanDisks()">⟳ SCAN DISKS</button>
+
+  <div class="manual-row">
+    <div class="manual-input-wrap">
+      <span class="manual-label">DISK #</span>
+      <input class="manual-input" id="manualDiskNum" type="number" min="0" max="99"
+        placeholder="0" oninput="onManualInput(this.value)" />
+    </div>
+    <button class="select-btn" onclick="confirmManual()">SELECT</button>
+  </div>
+
+  <!-- SELECTED DISK PANEL -->
+  <div class="selected-panel" id="selectedPanel">
+    <div class="selected-header">
+      <div>
+        <div class="selected-name" id="selName">—</div>
+        <div class="selected-meta" id="selMeta">—</div>
+      </div>
+      <span class="status-badge unknown" id="selStatusBadge">UNKNOWN</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-offline" id="btnOffline" onclick="runAction('offline')">⬇ OFFLINE</button>
+      <button class="btn btn-online"  id="btnOnline"  onclick="runAction('online')">⬆ ONLINE</button>
+    </div>
+  </div>
+
+  <div class="tab-row">
+    <div class="tab active" onclick="switchTab('log')">OUTPUT LOG</div>
+    <div class="tab" onclick="switchTab('script')">MANUAL SCRIPT</div>
+  </div>
+
+  <div class="tab-content active" id="tab-log">
+    <div class="terminal" id="terminal">
+      <p class="log-line info">// Siap. Klik SCAN DISKS atau input disk number manual.</p>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-script">
+    <div class="script-section">
+      <div class="script-label">Script OFFLINE</div>
+      <div class="script-box" id="scriptOfflineBox">select disk ?
+offline disk</div>
+      <button class="copy-btn" onclick="copyScriptAction('offline')">[ COPY OFFLINE SCRIPT ]</button>
+
+      <div class="script-label">Script ONLINE</div>
+      <div class="script-box" id="scriptOnlineBox">select disk ?
+online disk
+attributes disk clear readonly</div>
+      <button class="copy-btn" onclick="copyScriptAction('online')">[ COPY ONLINE SCRIPT ]</button>
+
+      <div class="script-hint">
+        1. Copy script → simpan sebagai <span>disk.txt</span><br>
+        2. CMD as Admin → ketik: <span>diskpart /s disk.txt</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────
+// Electron IPC — hanya aktif di dalam Electron
+// ─────────────────────────────────────────
+let ipcRenderer = null;
+try {
+  ipcRenderer = require('electron').ipcRenderer;
+} catch (e) {
+  // Berjalan di browser biasa, IPC tidak tersedia
+}
+
+let selectedDisk = null;
+let scannedDisks = [];
+
+// ─────────────────────────────────────────
+// LOG
+// ─────────────────────────────────────────
+function log(msg, type = 'info') {
+  const t = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.className = 'log-line ' + type;
+  p.textContent = msg;
+  t.appendChild(p);
+  t.scrollTop = t.scrollHeight;
+}
+
+// ─────────────────────────────────────────
+// SCAN DISKS
+// ─────────────────────────────────────────
+async function scanDisks() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.textContent = '⟳ SCANNING...';
+  log('');
+  log('> Mendeteksi disk via PowerShell WMI...', 'running');
+
+  let disks = [];
+
+  if (ipcRenderer) {
+    // ── Electron: gunakan IPC ──
+    try {
+      disks = await ipcRenderer.invoke('list-disks');
+      if (disks.length > 0) {
+        log('> ' + disks.length + ' disk ditemukan.', 'success');
+      } else {
+        log('> Tidak ada disk terdeteksi.', 'error');
+      }
+    } catch (e) {
+      log('> Gagal membaca disk: ' + e.message, 'error');
+    }
+  } else {
+    // ── Browser fallback: data dummy ──
+    log('> Electron IPC tidak tersedia — data contoh ditampilkan.', 'error');
+    log('> Build ke .exe untuk data disk real.', 'info');
+    disks = [
+      { num: 0, name: 'Samsung SSD 870 EVO 500GB',  type: 'SSD',  size: '476.9 GB', status: 'online'  },
+      { num: 1, name: 'WDC WD10EZEX-08WN4A0',       type: 'HDD',  size: '931.5 GB', status: 'offline' },
+      { num: 2, name: 'Kingston DataTraveler 3.0',   type: 'USB',  size: '14.9 GB',  status: 'online'  },
+    ];
+  }
+
+  scannedDisks = disks;
+  renderDiskList(disks);
+  btn.disabled = false;
+  btn.textContent = '⟳ SCAN DISKS';
+}
+
+// ─────────────────────────────────────────
+// RENDER DISK LIST
+// ─────────────────────────────────────────
+function renderDiskList(disks) {
+  const list = document.getElementById('diskList');
+  list.innerHTML = '';
+  if (!disks || disks.length === 0) {
+    list.innerHTML = '<div class="disk-empty">Tidak ada disk terdeteksi.</div>';
+    return;
+  }
+  disks.forEach(disk => {
+    const row = document.createElement('div');
+    row.className = 'disk-row';
+    row.id = 'diskrow-' + disk.num;
+    row.onclick = () => selectDisk(disk);
+    const st = (disk.status || 'unknown').toLowerCase();
+    row.innerHTML = `
+      <div class="disk-num">${disk.num}</div>
+      <div class="disk-info">
+        <div class="disk-name">${disk.name || 'Unknown Disk'}</div>
+        <div class="disk-type">${disk.type || 'DISK'}</div>
+      </div>
+      <div class="disk-size">${disk.size || '—'}</div>
+      <div class="disk-status"><span class="status-badge ${st}">${st.toUpperCase()}</span></div>
+      <div class="disk-check">✓</div>
+    `;
+    list.appendChild(row);
+  });
+}
+
+// ─────────────────────────────────────────
+// SELECT DISK
+// ─────────────────────────────────────────
+function selectDisk(disk) {
+  selectedDisk = disk;
+  document.querySelectorAll('.disk-row').forEach(r => r.classList.remove('selected'));
+  const row = document.getElementById('diskrow-' + disk.num);
+  if (row) row.classList.add('selected');
+  updateSelectedPanel(disk);
+  updateScripts(disk.num);
+  log(`> Disk ${disk.num} dipilih — ${disk.name || '?'} · ${disk.size || '?'} · ${(disk.status || 'unknown').toUpperCase()}`, 'cmd');
+  switchTab('log');
+}
+
+function onManualInput(val) {
+  if (val !== '') updateScripts(parseInt(val));
+}
+
+function confirmManual() {
+  const val = document.getElementById('manualDiskNum').value;
+  if (val === '' || isNaN(parseInt(val))) {
+    log('> Masukkan disk number yang valid.', 'error');
+    return;
+  }
+  const num = parseInt(val);
+  const existing = scannedDisks.find(d => d.num === num);
+  const disk = existing || { num, name: 'Disk ' + num, type: 'MANUAL', size: '—', status: 'unknown' };
+  document.querySelectorAll('.disk-row').forEach(r => r.classList.remove('selected'));
+  const row = document.getElementById('diskrow-' + num);
+  if (row) row.classList.add('selected');
+  selectedDisk = disk;
+  updateSelectedPanel(disk);
+  updateScripts(num);
+  log(`> Disk ${num} dipilih secara manual.`, 'cmd');
+  switchTab('log');
+}
+
+// ─────────────────────────────────────────
+// UPDATE PANEL & SCRIPTS
+// ─────────────────────────────────────────
+function updateSelectedPanel(disk) {
+  document.getElementById('selectedPanel').classList.add('visible');
+  document.getElementById('selName').textContent = 'Disk ' + disk.num + ' — ' + (disk.name || 'Unknown');
+  document.getElementById('selMeta').textContent = (disk.type || 'DISK') + ' · ' + (disk.size || '—');
+  const badge = document.getElementById('selStatusBadge');
+  const st = (disk.status || 'unknown').toLowerCase();
+  badge.className = 'status-badge ' + st;
+  badge.textContent = st.toUpperCase();
+}
+
+function updateScripts(num) {
+  document.getElementById('scriptOfflineBox').textContent = `select disk ${num}\noffline disk`;
+  document.getElementById('scriptOnlineBox').textContent  = `select disk ${num}\nonline disk\nattributes disk clear readonly`;
+}
+
+// ─────────────────────────────────────────
+// RUN DISKPART ACTION
+// ─────────────────────────────────────────
+async function runAction(action) {
+  if (!selectedDisk) { log('> Pilih disk dulu!', 'error'); return; }
+
+  const num = selectedDisk.num;
+  document.getElementById('btnOffline').disabled = true;
+  document.getElementById('btnOnline').disabled = true;
+
+  log('');
+  log(`> Target: Disk ${num} — ${selectedDisk.name || '?'}`, 'cmd');
+  log(`> Operasi: ${action.toUpperCase()}`, 'cmd');
+
+  const cmds = action === 'offline'
+    ? `select disk ${num}\noffline disk`
+    : `select disk ${num}\nonline disk\nattributes disk clear readonly`;
+
+  if (ipcRenderer) {
+    // ── Electron: eksekusi langsung via diskpart ──
+    try {
+      const result = await ipcRenderer.invoke('run-diskpart', cmds);
+
+      if (result.output) {
+        result.output.split('\n').forEach(line => {
+          const l = line.trim();
+          if (l) log('  ' + l, result.error ? 'error' : 'running');
+        });
+      }
+
+      if (!result.error) {
+        selectedDisk.status = action === 'offline' ? 'offline' : 'online';
+        updateSelectedPanel(selectedDisk);
+        // Update badge di list
+        const row = document.getElementById('diskrow-' + num);
+        if (row) {
+          const badge = row.querySelector('.status-badge');
+          if (badge) {
+            badge.className = 'status-badge ' + selectedDisk.status;
+            badge.textContent = selectedDisk.status.toUpperCase();
+          }
+        }
+        log(`> Disk ${num} berhasil di-${action.toUpperCase()}.`, 'success');
+      } else {
+        log('> Operasi gagal. Pastikan dijalankan sebagai Administrator.', 'error');
+      }
+    } catch (e) {
+      log('> Error: ' + e.message, 'error');
+    }
+  } else {
+    // ── Browser fallback ──
+    log('> Electron IPC tidak tersedia.', 'error');
+    log('> Salin script dari tab MANUAL SCRIPT → jalankan di CMD Admin.', 'info');
+  }
+
+  document.getElementById('btnOffline').disabled = false;
+  document.getElementById('btnOnline').disabled = false;
+}
+
+// ─────────────────────────────────────────
+// COPY SCRIPT
+// ─────────────────────────────────────────
+function copyScriptAction(action) {
+  const box = action === 'offline'
+    ? document.getElementById('scriptOfflineBox')
+    : document.getElementById('scriptOnlineBox');
+  navigator.clipboard.writeText('diskpart\n' + box.textContent).then(() => {
+    log(`> Script ${action.toUpperCase()} di-copy ke clipboard.`, 'success');
+    switchTab('log');
+  });
+}
+
+// ─────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && name === 'log') || (i === 1 && name === 'script'));
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+</script>
+</body>
+</html>
